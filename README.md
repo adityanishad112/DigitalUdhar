@@ -248,3 +248,5 @@ Billing/invoices, inventory, family access, offline sync, a dedicated settlement
 ---
 
 *Built as an MVP-first, integrity-first reference — the financial core and the security guarantees are the product.*
+#   J a m a B a a k i  
+ 
