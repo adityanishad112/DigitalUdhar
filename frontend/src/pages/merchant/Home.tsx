@@ -15,6 +15,7 @@ import { ApiError } from '@/lib/api';
 import { TopBar } from '@/components/layout/TopBar';
 import { PageBody } from '@/components/layout/PageBody';
 import { NotificationBell } from '@/components/layout/NotificationBell';
+import { LogoutButton } from '@/components/layout/LogoutButton';
 import { Card } from '@/components/ui/Card';
 import { Money } from '@/components/ui/Money';
 import { Button } from '@/components/ui/Button';
@@ -29,7 +30,7 @@ export function MerchantHome() {
   if (shopQ.isLoading) {
     return (
       <>
-        <TopBar title="Shop dashboard" />
+        <TopBar title="Shop dashboard" right={<LogoutButton />} />
         <LoadingState />
       </>
     );
@@ -42,7 +43,7 @@ export function MerchantHome() {
     if (notFound && role === 'MERCHANT') return <RegisterShop />;
     return (
       <>
-        <TopBar title="Shop dashboard" />
+        <TopBar title="Shop dashboard" right={<LogoutButton />} />
         <ErrorState
           title={notFound ? 'No shop linked to your account yet' : undefined}
           onRetry={() => shopQ.refetch()}
@@ -90,7 +91,12 @@ function MerchantDashboard({ shop }: { shop: Merchant }) {
       <TopBar
         title={shop.shopName}
         subtitle={t('merchant.dashboard')}
-        right={<NotificationBell />}
+        right={
+          <div className="flex items-center gap-1">
+            <NotificationBell />
+            <LogoutButton />
+          </div>
+        }
       />
       <PageBody>
         {reportQ.isLoading ? (

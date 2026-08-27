@@ -4,6 +4,7 @@ import { useAdminOverview } from '@/services/hooks';
 import { TopBar } from '@/components/layout/TopBar';
 import { PageBody } from '@/components/layout/PageBody';
 import { NotificationBell } from '@/components/layout/NotificationBell';
+import { LogoutButton } from '@/components/layout/LogoutButton';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Money } from '@/components/ui/Money';
 import { LoadingState, ErrorState } from '@/components/ui/states';
@@ -48,7 +49,16 @@ export function AdminOverviewPage() {
 
   return (
     <>
-      <TopBar title={t('admin.title')} subtitle={t('admin.overview')} right={<NotificationBell />} />
+      <TopBar
+        title={t('admin.title')}
+        subtitle={t('admin.overview')}
+        right={
+          <div className="flex items-center gap-1">
+            <NotificationBell />
+            <LogoutButton />
+          </div>
+        }
+      />
       <PageBody>
         {q.isLoading ? (
           <LoadingState />

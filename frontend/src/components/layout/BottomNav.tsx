@@ -46,6 +46,7 @@ const ADMIN_TABS: Tab[] = [
   { to: '/admin/users', labelKey: 'admin.users', icon: Users },
   { to: '/admin/merchants', labelKey: 'admin.merchants', icon: ShieldCheck },
   { to: '/admin/audit', labelKey: 'admin.audit', icon: ScrollText },
+  { to: '/admin/profile', labelKey: 'nav.profile', icon: User },
 ];
 
 export function BottomNav() {
