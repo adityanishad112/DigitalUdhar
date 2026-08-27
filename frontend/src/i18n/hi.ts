@@ -1,0 +1,87 @@
+import type { I18nKey } from './en';
+
+/** Hindi (Devanagari). Missing keys fall back to English. */
+export const hi: Partial<Record<I18nKey, string>> = {
+  'app.tagline': 'स्कैन करें। उधार लें। बाद में चुकाएँ।',
+
+  'nav.home': 'होम',
+  'nav.scan': 'स्कैन',
+  'nav.khata': 'खाते',
+  'nav.activity': 'गतिविधि',
+  'nav.profile': 'प्रोफ़ाइल',
+  'nav.requests': 'अनुरोध',
+  'nav.reports': 'रिपोर्ट',
+  'nav.qr': 'मेरा QR',
+  'nav.customers': 'ग्राहक',
+
+  'common.continue': 'आगे बढ़ें',
+  'common.cancel': 'रद्द करें',
+  'common.confirm': 'पुष्टि करें',
+  'common.back': 'वापस',
+  'common.retry': 'फिर कोशिश करें',
+  'common.loading': 'लोड हो रहा है…',
+  'common.due': 'देय',
+  'common.outstanding': 'बकाया',
+  'common.paid': 'चुकाया',
+  'common.cleared': 'चुकता',
+  'common.amount': 'राशि',
+  'common.note': 'टिप्पणी',
+  'common.viewAll': 'सभी देखें',
+
+  'login.title': 'स्वागत है',
+  'login.subtitle': 'अपने मोबाइल नंबर से लॉगिन करें',
+  'login.mobile': 'मोबाइल नंबर',
+  'login.role': 'मैं हूँ',
+  'login.role.customer': 'ग्राहक',
+  'login.role.merchant': 'दुकानदार',
+  'login.role.admin': 'एडमिन',
+  'login.sendOtp': 'OTP भेजें',
+  'login.otp': 'OTP दर्ज करें',
+  'login.verify': 'सत्यापित करें',
+  'login.name': 'आपका नाम',
+
+  'scan.title': 'दुकान का QR स्कैन करें',
+  'scan.hint': 'उधार लेने के लिए दुकान के काउंटर QR को स्कैन करें',
+  'scan.manual': 'कोड मैन्युअली दर्ज करें',
+  'scan.invalid': 'यह QR मान्य नहीं है या समाप्त हो गया है',
+
+  'shop.takeUdhaar': 'उधार लें',
+  'shop.yourBalance': 'इस दुकान पर आपका बकाया',
+  'shop.creditLimit': 'क्रेडिट सीमा',
+  'shop.available': 'उपलब्ध',
+
+  'udhaar.request.title': 'उधार लें',
+  'udhaar.request.amount': 'कितना?',
+  'udhaar.request.due': 'कब तक चुकाएँगे',
+  'udhaar.request.submit': 'उधार का अनुरोध करें',
+  'udhaar.request.sent': 'अनुरोध भेजा गया — दुकान की स्वीकृति की प्रतीक्षा',
+
+  'udhaar.detail.timeline': 'प्रमाण समयरेखा',
+  'udhaar.detail.ledger': 'बही-खाता',
+  'udhaar.detail.pay': 'अभी भुगतान करें',
+  'udhaar.detail.promise': 'भुगतान का वादा',
+
+  'pay.title': 'उधार चुकाएँ',
+  'pay.amount': 'भुगतान राशि',
+  'pay.full': 'पूरा भुगतान',
+  'pay.payNow': 'सुरक्षित भुगतान करें',
+  'pay.processing': 'भुगतान सत्यापित हो रहा है…',
+  'pay.success': 'भुगतान सफल',
+  'pay.cleared': 'उधार पूरी तरह चुकता! ₹0 शेष',
+
+  'merchant.dashboard': 'दुकान डैशबोर्ड',
+  'merchant.outstanding': 'कुल बकाया',
+  'merchant.pendingRequests': 'लंबित अनुरोध',
+  'merchant.accept': 'स्वीकार करें',
+  'merchant.reject': 'अस्वीकार करें',
+  'merchant.recordCash': 'नकद भुगतान दर्ज करें',
+  'merchant.noRequests': 'कोई लंबित अनुरोध नहीं',
+
+  'qr.title': 'आपका काउंटर QR',
+  'qr.hint': 'ग्राहक इसे स्कैन करके उधार ले सकते हैं',
+  'qr.download': 'डाउनलोड',
+
+  'empty.khatas': 'अभी कोई खाता नहीं। पहला उधार लेने के लिए दुकान का QR स्कैन करें।',
+  'profile.language': 'भाषा',
+  'profile.logout': 'लॉग आउट',
+};

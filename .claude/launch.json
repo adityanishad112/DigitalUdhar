@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "api",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:/Users/asus/JamaBaaki/node_modules/tsx/dist/cli.mjs", "watch", "src/index.ts"],
+      "cwd": "backend",
+      "port": 4000
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["C:/Users/asus/JamaBaaki/node_modules/vite/bin/vite.js", "--host", "--port", "5173"],
+      "cwd": "frontend",
+      "port": 5173
+    }
+  ]
+}

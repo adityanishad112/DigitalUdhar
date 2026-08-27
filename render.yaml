@@ -1,0 +1,44 @@
+# Render Blueprint — Digital Udhar (single-service showcase deploy)
+# ---------------------------------------------------------------------------
+# One free Web Service runs the Node/Express API AND serves the built React
+# frontend from the same origin. Because the free plan has no persistent disk,
+# the in-process PGlite database lives on the ephemeral filesystem and is
+# re-seeded fresh on every deploy/restart (AUTO_SEED=true) — perfect for a demo,
+# not for durable data. See README "Deploy to Render" for the production upgrade.
+#
+# Usage: push this repo to GitHub, then in Render → New → Blueprint, point it at
+# the repo. Render reads this file and creates the service. You only set one
+# secret by hand (IDENTITY_ENC_KEY) — everything else is auto-generated/derived.
+services:
+  - type: web
+    name: digital-udhar
+    runtime: node
+    plan: free
+    region: singapore          # closest Render region to India; change if you like
+    branch: main               # the branch Render auto-deploys from
+    healthCheckPath: /health
+    autoDeploy: true
+    # Install ALL deps (tsx + vite are devDependencies) and build the frontend
+    # to frontend/dist, which the API then serves.
+    buildCommand: npm install --include=dev && npm run build -w frontend
+    # Run the API exactly as it runs locally (via tsx). It also serves the SPA.
+    startCommand: npm start -w backend
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: AUTO_SEED
+        value: "true"           # re-seed demo data on each boot (showcase)
+      - key: EXPOSE_OTP_IN_RESPONSE
+        value: "true"           # demo only — no real SMS gateway is wired
+      - key: PAYMENT_GATEWAY_PROVIDER
+        value: mock             # signed-webhook sandbox gateway (no real money)
+      - key: PGLITE_DATA_DIR
+        value: /tmp/udhar-data  # ephemeral by design for the free showcase
+      - key: JWT_SECRET
+        generateValue: true     # Render generates a strong random secret
+      - key: PAYMENT_GATEWAY_WEBHOOK_SECRET
+        generateValue: true
+      - key: IDENTITY_ENC_KEY
+        sync: false             # set this yourself: `openssl rand -hex 32` (64 hex chars)
+      # APP_BASE_URL / API_BASE_URL are auto-derived from RENDER_EXTERNAL_URL, so
+      # CORS and QR deep-links are correct without hard-coding the domain here.

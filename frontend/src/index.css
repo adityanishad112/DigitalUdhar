@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-ink-50 text-ink-900 font-sans antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Numbers read as money — tabular figures keep columns aligned. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-3xl bg-white shadow-card;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl font-semibold transition
+      active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 focus:outline-none
+      focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2;
+  }
+  .btn-primary {
+    @apply btn bg-brand-500 text-white hover:bg-brand-600 shadow-soft;
+  }
+  .btn-accent {
+    @apply btn bg-accent-500 text-white hover:bg-accent-600 shadow-soft;
+  }
+  .btn-ghost {
+    @apply btn bg-ink-100 text-ink-700 hover:bg-ink-200;
+  }
+  .btn-outline {
+    @apply btn border border-ink-200 bg-white text-ink-800 hover:bg-ink-50;
+  }
+
+  .input {
+    @apply w-full rounded-2xl border border-ink-200 bg-white px-4 py-3 text-base text-ink-900
+      placeholder:text-ink-400 focus:border-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-100;
+  }
+
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-ink-600;
+  }
+
+  /* App is a phone-width column even on desktop. */
+  .app-frame {
+    @apply mx-auto flex min-h-full w-full max-w-md flex-col bg-ink-50;
+  }
+}
+
+/* Hide the html5-qrcode default chrome we don't want. */
+#qr-reader__dashboard_section_csr span,
+#qr-reader__status_span {
+  @apply !text-ink-500;
+}
+#qr-reader img[alt='Info icon'] {
+  display: none;
+}
