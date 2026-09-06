@@ -61,11 +61,21 @@ http.interceptors.response.use(
     const status = error.response?.status ?? 0;
     const payload = error.response?.data?.error;
     const code = payload?.code ?? (status === 0 ? 'NETWORK' : 'ERROR');
-    const message =
-      payload?.message ??
-      (status === 0
-        ? 'Cannot reach the server. Is the backend running?'
-        : error.message || 'Something went wrong');
+
+    let message = payload?.message;
+    if (payload?.details && Array.isArray(payload.details) && payload.details.length > 0) {
+      const detailsMsg = payload.details
+        .map((d: { message?: string }) => d.message)
+        .filter(Boolean)
+        .join(', ');
+      if (detailsMsg) message = detailsMsg;
+    }
+    if (!message) {
+      message =
+        status === 0
+          ? 'Cannot reach the server. Is the backend running?'
+          : error.message || 'Something went wrong';
+    }
 
     if (status === 401 && onUnauthorized) {
       onUnauthorized();

@@ -19,6 +19,13 @@ const ROLES: { value: Role; labelKey: 'login.role.customer' | 'login.role.mercha
   { value: 'ADMIN', labelKey: 'login.role.admin' },
 ];
 
+const DEMO_ACCOUNTS: { role: Role; mobile: string; name: string; tag: string }[] = [
+  { role: 'CUSTOMER', mobile: '8000000001', name: 'Rahul Kumar', tag: 'Customer' },
+  { role: 'MERCHANT', mobile: '9000000001', name: 'Rajesh Sharma', tag: 'Sharma Store' },
+  { role: 'MERCHANT', mobile: '9000000002', name: 'Suresh Gupta', tag: 'Gupta Store' },
+  { role: 'ADMIN', mobile: '9999900000', name: 'Platform Admin', tag: 'Admin' },
+];
+
 export function Login() {
   const { t } = useT();
   const navigate = useNavigate();
@@ -39,12 +46,29 @@ export function Login() {
   const sendOtp = useSendOtp();
   const verifyOtp = useVerifyOtp();
 
+  const handleMobileChange = (raw: string) => {
+    let clean = raw.trim();
+    if (clean.startsWith('+91')) {
+      clean = clean.slice(3);
+    }
+    let digits = clean.replace(/\D/g, '');
+    if (digits.length === 12 && digits.startsWith('91')) {
+      digits = digits.slice(2);
+    } else if (digits.length === 11 && digits.startsWith('0')) {
+      digits = digits.slice(1);
+    }
+    setMobile(digits.slice(0, 10));
+  };
+
   const mobileValid = /^\d{10}$/.test(mobile);
 
-  const handleSend = async () => {
-    if (!mobileValid) return;
+  const handleSend = async (overrideMobile?: string, overrideRole?: Role) => {
+    const targetMobile = overrideMobile ?? mobile;
+    const targetRole = overrideRole ?? role;
+
+    if (!/^\d{10}$/.test(targetMobile)) return;
     try {
-      const res = await sendOtp.mutateAsync({ mobile, role });
+      const res = await sendOtp.mutateAsync({ mobile: targetMobile, role: targetRole });
       setDevOtp(res.devOtp);
       if (res.devOtp) setCode(res.devOtp); // prefill in dev so the demo is one tap
       setStep('otp');
@@ -53,8 +77,17 @@ export function Login() {
     }
   };
 
+  const handleQuickDemo = (demo: (typeof DEMO_ACCOUNTS)[0]) => {
+    setRole(demo.role);
+    setMobile(demo.mobile);
+    handleSend(demo.mobile, demo.role);
+  };
+
   const handleVerify = async () => {
-    if (code.length < 4) return;
+    if (code.length !== 6) {
+      pushToast({ kind: 'error', message: 'OTP must be 6 digits' });
+      return;
+    }
     try {
       const res = await verifyOtp.mutateAsync({ mobile, role, code, name: name.trim() || undefined });
       setSession(res.token, res.user);
@@ -68,7 +101,15 @@ export function Login() {
     <div className="app-frame min-h-dvh bg-ink-50">
       <div className="flex items-center justify-between bg-gradient-to-br from-brand-600 to-brand-500 px-5 pb-10 pt-6 text-white">
         <button
-          onClick={() => (step === 'otp' ? setStep('phone') : navigate('/'))}
+          onClick={() => {
+            if (step === 'otp') {
+              setStep('phone');
+              setCode('');
+              setDevOtp(undefined);
+            } else {
+              navigate('/');
+            }
+          }}
           className="-ml-1.5 rounded-full p-1.5 transition hover:bg-white/15"
           aria-label="Back"
         >
@@ -84,12 +125,13 @@ export function Login() {
         </div>
 
         {step === 'phone' ? (
-          <div className="animate-fade-in">
+          <div className="animate-fade-in space-y-4">
             <Field label={t('login.role')}>
               <div className="grid grid-cols-3 gap-2">
                 {ROLES.map((r) => (
                   <button
                     key={r.value}
+                    type="button"
                     onClick={() => setRole(r.value)}
                     className={cn(
                       'rounded-2xl border px-2 py-3 text-sm font-semibold transition',
@@ -104,32 +146,64 @@ export function Login() {
               </div>
             </Field>
 
-            <Field label={t('login.mobile')} hint="Use any 10-digit number for this demo.">
+            <Field label={t('login.mobile')} hint="Use any 10-digit number or select a demo account below.">
               <Input
                 leading="+91"
                 inputMode="numeric"
                 autoFocus
-                maxLength={10}
+                maxLength={14}
                 value={mobile}
-                onChange={(e) => setMobile(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                onChange={(e) => handleMobileChange(e.target.value)}
                 placeholder={t('login.mobilePlaceholder')}
               />
             </Field>
 
-            <Button fullWidth size="lg" disabled={!mobileValid} loading={sendOtp.isPending} onClick={handleSend}>
+            <Button fullWidth size="lg" disabled={!mobileValid} loading={sendOtp.isPending} onClick={() => handleSend()}>
               {t('login.sendOtp')}
             </Button>
+
+            {/* Quick Demo Logins */}
+            <div className="pt-4 border-t border-ink-200">
+              <p className="mb-2.5 text-xs font-semibold uppercase tracking-wider text-ink-400">
+                ⚡ Quick Demo Accounts (1-Tap Sign In)
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {DEMO_ACCOUNTS.map((d) => (
+                  <button
+                    key={d.mobile + d.role}
+                    type="button"
+                    onClick={() => handleQuickDemo(d)}
+                    disabled={sendOtp.isPending}
+                    className="flex flex-col items-start rounded-xl border border-ink-200 bg-white p-2.5 text-left transition hover:border-brand-300 hover:bg-brand-50/50"
+                  >
+                    <span className="text-xs font-bold text-ink-900">{d.name}</span>
+                    <span className="text-[11px] text-ink-500">{d.tag} · {d.mobile}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         ) : (
-          <div className="animate-fade-in">
-            <p className="mb-4 text-sm text-ink-600">{t('login.otpSent', { mobile: `+91 ${mobile}` })}</p>
+          <div className="animate-fade-in space-y-4">
+            <p className="text-sm text-ink-600">{t('login.otpSent', { mobile: `+91 ${mobile}` })}</p>
 
             {devOtp && (
-              <div className="mb-4 flex items-center gap-2 rounded-2xl bg-brand-50 px-4 py-3 text-sm text-brand-700 ring-1 ring-brand-100">
-                <ShieldCheck className="h-4 w-4" />
-                <span>
-                  {t('login.devOtp')}: <span className="font-bold tracking-widest">{devOtp}</span>
-                </span>
+              <div className="flex items-center justify-between rounded-2xl bg-brand-50 px-4 py-3 text-sm text-brand-700 ring-1 ring-brand-100">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-brand-600" />
+                  <span>
+                    {t('login.devOtp')}: <span className="font-bold tracking-widest">{devOtp}</span>
+                  </span>
+                </div>
+                {code !== devOtp && (
+                  <button
+                    type="button"
+                    onClick={() => setCode(devOtp)}
+                    className="text-xs font-bold text-brand-600 underline"
+                  >
+                    Fill
+                  </button>
+                )}
               </div>
             )}
 
@@ -149,18 +223,27 @@ export function Login() {
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('login.namePlaceholder')} />
             </Field>
 
-            <Button fullWidth size="lg" disabled={code.length < 4} loading={verifyOtp.isPending} onClick={handleVerify}>
+            <Button fullWidth size="lg" disabled={code.length !== 6} loading={verifyOtp.isPending} onClick={handleVerify}>
               {t('login.verify')}
             </Button>
 
-            <div className="mt-4 flex items-center justify-between text-sm">
-              <button onClick={() => setStep('phone')} className="font-medium text-ink-500">
+            <div className="flex items-center justify-between text-sm pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setStep('phone');
+                  setCode('');
+                  setDevOtp(undefined);
+                }}
+                className="font-medium text-ink-500 hover:text-ink-700"
+              >
                 {t('login.changeNumber')}
               </button>
               <button
-                onClick={handleSend}
+                type="button"
+                onClick={() => handleSend()}
                 disabled={sendOtp.isPending}
-                className="font-semibold text-brand-600 disabled:opacity-50"
+                className="font-semibold text-brand-600 hover:text-brand-700 disabled:opacity-50"
               >
                 {t('login.resend')}
               </button>

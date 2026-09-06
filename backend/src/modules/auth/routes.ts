@@ -15,7 +15,7 @@ export const authRouter = Router();
 const mobileSchema = z
   .string()
   .trim()
-  .regex(/^[6-9]\d{9}$/, 'Enter a valid 10-digit Indian mobile number');
+  .regex(/^\d{10}$/, 'Enter a valid 10-digit mobile number');
 
 const roleSchema = z.enum(USER_ROLES);
 
