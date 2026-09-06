@@ -219,6 +219,10 @@ export interface SimulateResult {
   eventId: string;
 }
 
+export interface VerifyPaymentResult {
+  result: WebhookResult;
+}
+
 export interface LedgerTxn {
   id: string;
   accountId: string;
@@ -326,3 +330,27 @@ export interface Dispute {
   amountClaimedPaise?: number | null;
   createdAt: string;
 }
+
+export interface DemoAccount {
+  role: Role;
+  mobile: string;
+  name: string;
+  label: string;
+  description: string;
+  badge: string;
+  shopName?: string;
+  qrToken?: string;
+  qrUrl?: string;
+  city?: string;
+  category?: string;
+  userId?: string | null;
+}
+
+export interface DemoAccountsResponse {
+  accounts: DemoAccount[];
+  stats: {
+    totalUdhaars: number;
+  };
+  demoReady: boolean;
+}
+

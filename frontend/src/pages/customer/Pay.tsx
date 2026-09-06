@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { BadgeIndianRupee, CheckCircle2, Lock, PartyPopper, ShieldCheck, XCircle } from 'lucide-react';
-import { useCreateOrder, useSimulatePayment, useUdhaarDetail } from '@/services/hooks';
+import { useCreateOrder, useMe, useSimulatePayment, useUdhaarDetail, useVerifyPayment } from '@/services/hooks';
 import { useUi } from '@/store/ui';
 import { ApiError } from '@/lib/api';
 import type { CreateOrderResult } from '@/lib/types';
 import { rupeesToPaise } from '@/lib/money';
+import { loadRazorpayScript } from '@/lib/razorpay';
 import { TopBar } from '@/components/layout/TopBar';
 import { PageBody } from '@/components/layout/PageBody';
 import { Card } from '@/components/ui/Card';
@@ -16,6 +17,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { LoadingState } from '@/components/ui/states';
 import { cn } from '@/lib/cn';
 import { useT } from '@/i18n';
+import { PaymentSimulatorModal } from '@/components/demo/PaymentSimulatorModal';
 
 type Step = 'amount' | 'sandbox' | 'processing' | 'success' | 'failed';
 const METHODS = ['UPI', 'CARD', 'NETBANKING'] as const;
@@ -26,8 +28,10 @@ export function Pay() {
   const navigate = useNavigate();
   const pushToast = useUi((s) => s.pushToast);
 
+  const me = useMe();
   const q = useUdhaarDetail(id ?? null);
   const createOrder = useCreateOrder();
+  const verifyPayment = useVerifyPayment();
   const simulate = useSimulatePayment();
 
   const [step, setStep] = useState<Step>('amount');
@@ -48,7 +52,70 @@ export function Pay() {
     try {
       const res = await createOrder.mutateAsync({ udhaarId: id, amountPaise: payPaise, method });
       setOrder(res);
-      setStep('sandbox');
+
+      if (res.order.provider.toLowerCase() === 'razorpay') {
+        const loaded = await loadRazorpayScript();
+        if (!loaded || !window.Razorpay) {
+          pushToast({ kind: 'error', message: 'Unable to load Razorpay checkout. Please check internet connection.' });
+          return;
+        }
+
+        const rzp = new window.Razorpay({
+          key: res.order.keyId,
+          amount: res.order.amountPaise,
+          currency: res.order.currency,
+          name: 'JamaBaaki',
+          description: `Repayment to ${q.data?.merchant?.shopName ?? 'Merchant'}`,
+          order_id: res.order.gatewayOrderId,
+          prefill: {
+            name: me.data?.name ?? '',
+            contact: me.data?.mobile ?? '',
+          },
+          theme: {
+            color: '#12a082',
+          },
+          handler: async (response) => {
+            setStep('processing');
+            try {
+              const verifyRes = await verifyPayment.mutateAsync({
+                gatewayOrderId: response.razorpay_order_id,
+                gatewayPaymentId: response.razorpay_payment_id,
+                signature: response.razorpay_signature,
+              });
+              const ok = verifyRes.result.paymentStatus === 'SUCCESS';
+              if (ok) {
+                setCleared(Boolean(verifyRes.result.cleared));
+                setStep('success');
+              } else {
+                setStep('failed');
+              }
+            } catch (err) {
+              pushToast({
+                kind: 'error',
+                message: err instanceof ApiError ? err.message : 'Payment verification failed',
+              });
+              setStep('failed');
+            }
+          },
+          modal: {
+            ondismiss: () => {
+              setStep('amount');
+            },
+          },
+        });
+
+        rzp.on('payment.failed', (resp) => {
+          pushToast({
+            kind: 'error',
+            message: resp.error?.description || 'Payment failed at gateway',
+          });
+          setStep('failed');
+        });
+
+        rzp.open();
+      } else {
+        setStep('sandbox');
+      }
     } catch (e) {
       pushToast({ kind: 'error', message: e instanceof ApiError ? e.message : 'Could not start payment' });
     }
@@ -143,27 +210,13 @@ export function Pay() {
         )}
 
         {step === 'sandbox' && order && (
-          <div className="animate-fade-in space-y-4">
-            <Card>
-              <p className="mb-1 text-center text-sm font-semibold uppercase tracking-wide text-accent-600">
-                {t('pay.sandbox')}
-              </p>
-              <div className="my-3 text-center">
-                <p className="text-sm text-ink-500">{t('pay.total')}</p>
-                <Money paise={order.order.amountPaise} size="2xl" tone="accent" />
-              </div>
-              <div className="rounded-2xl bg-ink-50 p-3 text-center text-xs text-ink-500">
-                Order <span className="font-semibold text-ink-700">{order.order.gatewayOrderId}</span> · {order.order.provider}
-              </div>
-              <p className="mt-3 text-center text-xs text-ink-400">{t('pay.sandboxNote')}</p>
-            </Card>
-            <Button variant="primary" size="lg" fullWidth onClick={() => runSimulation('success')}>
-              <CheckCircle2 className="h-5 w-5" /> {t('pay.successTry')}
-            </Button>
-            <Button variant="outline" fullWidth className="!text-rose-600" onClick={() => runSimulation('fail')}>
-              {t('pay.failedTry')}
-            </Button>
-          </div>
+          <PaymentSimulatorModal
+            order={order}
+            shopName={q.data?.merchant?.shopName}
+            isProcessing={simulate.isPending}
+            onSimulate={runSimulation}
+            onClose={() => setStep('amount')}
+          />
         )}
 
         {step === 'processing' && (
@@ -203,7 +256,7 @@ export function Pay() {
             <h2 className="mt-5 font-display text-xl font-extrabold text-ink-900">Payment failed</h2>
             <p className="mt-1 max-w-[16rem] text-ink-500">No money was deducted. You can try again.</p>
             <div className="mt-8 flex w-full flex-col gap-2">
-              <Button size="lg" onClick={() => setStep('sandbox')}>
+              <Button size="lg" onClick={() => (order?.order.provider.toLowerCase() === 'razorpay' ? setStep('amount') : setStep('sandbox'))}>
                 Try again
               </Button>
               <Button variant="ghost" onClick={() => navigate(`/app/udhaar/${id}`, { replace: true })}>

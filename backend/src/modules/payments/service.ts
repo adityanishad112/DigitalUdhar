@@ -134,9 +134,65 @@ export async function createOrder(customerUserId: string, input: CreateOrderInpu
 }
 
 // ---------------------------------------------------------------------------
+// Payment completion helper (used by both webhooks & verify endpoint)
+// ---------------------------------------------------------------------------
+export async function completePaymentSuccessTx(
+  tx: Tx,
+  fresh: Payment,
+  gatewayPaymentId: string,
+) {
+  const [row] = await tx.select().from(udhaar).where(eq(udhaar.id, fresh.udhaarId)).limit(1);
+  if (!row) throw new NotFoundError('Udhaar not found for payment');
+
+  const repay = await applyRepaymentTx(tx, {
+    udhaarRow: row,
+    amountPaise: fresh.amountPaise,
+    ledgerMethod: 'DIGITAL',
+    paymentMethod: fresh.method,
+    createdByUserId: fresh.customerUserId,
+    actorRole: 'CUSTOMER',
+    paymentId: fresh.id,
+    referenceType: 'payment',
+    referenceId: fresh.id,
+  });
+
+  const fee = feeFor(fresh.amountPaise);
+  const net = fresh.amountPaise - fee;
+
+  await tx
+    .update(payments)
+    .set({
+      status: 'SUCCESS',
+      gatewayPaymentId,
+      feePaise: fee,
+      netPaise: net,
+      verifiedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(payments.id, fresh.id));
+
+  await tx
+    .update(paymentOrders)
+    .set({ status: 'PAID', updatedAt: new Date() })
+    .where(eq(paymentOrders.paymentId, fresh.id));
+
+  // Merchant settlement (gross − gateway fee). Left PENDING for the sweeper.
+  await tx.insert(settlements).values({
+    merchantId: fresh.merchantId,
+    paymentId: fresh.id,
+    grossPaise: fresh.amountPaise,
+    feePaise: fee,
+    netPaise: net,
+    status: 'PENDING',
+  });
+
+  return { cleared: repay.cleared };
+}
+
+// ---------------------------------------------------------------------------
 // Webhook processing (signature verify + idempotency + apply in one txn)
 // ---------------------------------------------------------------------------
-interface ParsedWebhook {
+export interface ParsedWebhook {
   eventId: string;
   event: string;
   gatewayOrderId?: string;
@@ -145,20 +201,41 @@ interface ParsedWebhook {
   failureReason?: string;
 }
 
-function parseWebhook(rawBody: string): ParsedWebhook {
+export function parseWebhook(rawBody: string, eventIdHeader?: string): ParsedWebhook {
   let json: any;
   try {
     json = JSON.parse(rawBody);
   } catch {
     throw new BadRequestError('Malformed webhook body');
   }
+
+  // Support both Razorpay native payload schema:
+  // payload.payment.entity.*, payload.order.entity.*
+  // and JamaBaaki mock schema: payload.payment.*, payload.order.*
+  const paymentEntity = json.payload?.payment?.entity ?? json.payload?.payment;
+  const orderEntity = json.payload?.order?.entity ?? json.payload?.order;
+
+  const event = json.event;
+  const gatewayOrderId = orderEntity?.id ?? paymentEntity?.order_id;
+  const gatewayPaymentId = paymentEntity?.id;
+  const amountPaise = paymentEntity?.amount ?? paymentEntity?.amountPaise;
+  const failureReason = paymentEntity?.error_description ?? paymentEntity?.failureReason;
+
+  const eventId =
+    eventIdHeader ||
+    json.eventId ||
+    json.id ||
+    (event && (gatewayPaymentId || gatewayOrderId)
+      ? `${event}_${gatewayPaymentId || gatewayOrderId}_${json.created_at ?? Date.now()}`
+      : undefined);
+
   return {
-    eventId: json.eventId,
-    event: json.event,
-    gatewayOrderId: json.payload?.order?.id,
-    gatewayPaymentId: json.payload?.payment?.id,
-    amountPaise: json.payload?.payment?.amountPaise,
-    failureReason: json.payload?.payment?.failureReason,
+    eventId: eventId ?? `bad_${secureToken(8)}`,
+    event,
+    gatewayOrderId,
+    gatewayPaymentId,
+    amountPaise,
+    failureReason,
   };
 }
 
@@ -169,15 +246,19 @@ export interface WebhookResult {
   cleared?: boolean;
 }
 
-export async function processWebhook(rawBody: string, signature: string): Promise<WebhookResult> {
+export async function processWebhook(
+  rawBody: string,
+  signature: string,
+  eventIdHeader?: string,
+): Promise<WebhookResult> {
   const gateway = getGateway();
 
   // 1. Signature first — never trust an unverified body.
   if (!gateway.verifyWebhookSignature({ body: rawBody, signature: signature ?? '' })) {
     try {
-      const maybe = parseWebhook(rawBody);
+      const maybe = parseWebhook(rawBody, eventIdHeader);
       await db.insert(paymentWebhooks).values({
-        eventId: maybe.eventId ?? `bad_${secureToken(8)}`,
+        eventId: maybe.eventId,
         provider: gateway.provider,
         eventType: maybe.event ?? 'unknown',
         signature,
@@ -190,7 +271,7 @@ export async function processWebhook(rawBody: string, signature: string): Promis
     throw new UnauthorizedError('Invalid webhook signature');
   }
 
-  const parsed = parseWebhook(rawBody);
+  const parsed = parseWebhook(rawBody, eventIdHeader);
   if (!parsed.eventId || !parsed.event) throw new BadRequestError('Missing webhook event fields');
 
   // 2. Idempotency — a duplicate delivery is recognised and never re-applied.
@@ -246,50 +327,7 @@ export async function processWebhook(rawBody: string, signature: string): Promis
     }
 
     if (parsed.event === 'payment.captured') {
-      const [row] = await tx.select().from(udhaar).where(eq(udhaar.id, fresh.udhaarId)).limit(1);
-      if (!row) throw new NotFoundError('Udhaar not found for payment');
-
-      const repay = await applyRepaymentTx(tx, {
-        udhaarRow: row,
-        amountPaise: fresh.amountPaise,
-        ledgerMethod: 'DIGITAL',
-        paymentMethod: fresh.method,
-        createdByUserId: fresh.customerUserId,
-        actorRole: 'CUSTOMER',
-        paymentId: fresh.id,
-        referenceType: 'payment',
-        referenceId: fresh.id,
-      });
-
-      const fee = feeFor(fresh.amountPaise);
-      const net = fresh.amountPaise - fee;
-
-      await tx
-        .update(payments)
-        .set({
-          status: 'SUCCESS',
-          gatewayPaymentId: parsed.gatewayPaymentId,
-          feePaise: fee,
-          netPaise: net,
-          verifiedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(payments.id, fresh.id));
-
-      await tx
-        .update(paymentOrders)
-        .set({ status: 'PAID', updatedAt: new Date() })
-        .where(eq(paymentOrders.paymentId, fresh.id));
-
-      // Merchant settlement (gross − gateway fee). Left PENDING for the sweeper.
-      await tx.insert(settlements).values({
-        merchantId: fresh.merchantId,
-        paymentId: fresh.id,
-        grossPaise: fresh.amountPaise,
-        feePaise: fee,
-        netPaise: net,
-        status: 'PENDING',
-      });
+      const repay = await completePaymentSuccessTx(tx, fresh, parsed.gatewayPaymentId!);
 
       await tx
         .update(paymentWebhooks)
@@ -372,6 +410,79 @@ export async function simulatePayment(
   // Server-to-server: hand the signed envelope to the very same verified path.
   const result = await processWebhook(envelope.body, envelope.signature);
   return { result, gatewayPaymentId, eventId: envelope.eventId };
+}
+
+// ---------------------------------------------------------------------------
+// Verify payment — verifies the client checkout signature and applies success
+// ---------------------------------------------------------------------------
+export interface VerifyPaymentInput {
+  gatewayOrderId: string;
+  gatewayPaymentId: string;
+  signature: string;
+}
+
+export async function verifyPayment(customerUserId: string, input: VerifyPaymentInput) {
+  const [payment] = await db
+    .select()
+    .from(payments)
+    .where(eq(payments.gatewayOrderId, input.gatewayOrderId))
+    .limit(1);
+
+  if (!payment) throw new NotFoundError('Payment order not found');
+  if (payment.customerUserId !== customerUserId) throw new ForbiddenError('Not your payment order');
+
+  if (payment.status === 'SUCCESS') {
+    return {
+      result: {
+        status: 'ALREADY_FINAL' as const,
+        paymentId: payment.id,
+        paymentStatus: 'SUCCESS',
+      },
+    };
+  }
+  if (payment.status === 'FAILED') {
+    return {
+      result: {
+        status: 'ALREADY_FINAL' as const,
+        paymentId: payment.id,
+        paymentStatus: 'FAILED',
+      },
+    };
+  }
+
+  const gateway = getGateway();
+  const valid = gateway.verifyPaymentSignature({
+    orderId: input.gatewayOrderId,
+    paymentId: input.gatewayPaymentId,
+    signature: input.signature,
+  });
+
+  if (!valid) {
+    throw new UnauthorizedError('Invalid payment signature');
+  }
+
+  return db.transaction(async (tx) => {
+    const [fresh] = await tx.select().from(payments).where(eq(payments.id, payment.id)).limit(1);
+    if (fresh.status === 'SUCCESS' || fresh.status === 'FAILED') {
+      return {
+        result: {
+          status: 'ALREADY_FINAL' as const,
+          paymentId: fresh.id,
+          paymentStatus: fresh.status,
+        },
+      };
+    }
+
+    const { cleared } = await completePaymentSuccessTx(tx, fresh, input.gatewayPaymentId);
+    return {
+      result: {
+        status: 'PROCESSED' as const,
+        paymentId: fresh.id,
+        paymentStatus: 'SUCCESS',
+        cleared,
+      },
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------

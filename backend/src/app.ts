@@ -25,6 +25,7 @@ import { adminRouter } from './modules/admin/routes';
 import { familyRouter } from './modules/family/routes';
 import { receiptsRouter } from './modules/receipts/routes';
 import { settlementsRouter } from './modules/settlements/routes';
+import { demoRouter } from './modules/demo/routes';
 
 export function createApp() {
   const app = express();
@@ -71,6 +72,7 @@ export function createApp() {
   app.use('/api/settlements', settlementsRouter);
   app.use('/api/family', familyRouter);
   app.use('/api/admin', adminRouter);
+  app.use('/api/demo', demoRouter);
 
   // Single-service deploy: serve the built frontend from the same origin so the
   // SPA's relative `/api` calls stay same-origin (no CORS) and there is only one

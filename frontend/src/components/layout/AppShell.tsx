@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import { BottomNav } from './BottomNav';
+import { DemoBar } from '@/components/demo/DemoBar';
 
 /**
  * The phone-width app frame: a scrollable content area with a role-aware
@@ -13,6 +14,7 @@ export function AppShell() {
         <Outlet />
       </main>
       <BottomNav />
+      <DemoBar />
     </div>
   );
 }

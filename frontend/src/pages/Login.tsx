@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ShieldCheck } from 'lucide-react';
-import { useSendOtp, useVerifyOtp } from '@/services/hooks';
+import { useDemoQuickLogin, useSendOtp, useVerifyOtp } from '@/services/hooks';
 import { useAuth } from '@/store/auth';
 import { useUi } from '@/store/ui';
 import { homePathFor } from '@/App';
@@ -10,6 +10,7 @@ import { ApiError } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Field, Input } from '@/components/ui/Input';
 import { LanguageSwitch } from '@/components/layout/LanguageSwitch';
+import { DemoBar } from '@/components/demo/DemoBar';
 import { useT } from '@/i18n';
 import { cn } from '@/lib/cn';
 
@@ -45,6 +46,7 @@ export function Login() {
 
   const sendOtp = useSendOtp();
   const verifyOtp = useVerifyOtp();
+  const quickLogin = useDemoQuickLogin();
 
   const handleMobileChange = (raw: string) => {
     let clean = raw.trim();
@@ -77,10 +79,17 @@ export function Login() {
     }
   };
 
-  const handleQuickDemo = (demo: (typeof DEMO_ACCOUNTS)[0]) => {
-    setRole(demo.role);
-    setMobile(demo.mobile);
-    handleSend(demo.mobile, demo.role);
+  const handleQuickDemo = async (demo: (typeof DEMO_ACCOUNTS)[0]) => {
+    try {
+      const res = await quickLogin.mutateAsync({ mobile: demo.mobile, role: demo.role });
+      setSession(res.token, res.user);
+      pushToast({ kind: 'success', message: `Signed in as ${res.user.name ?? demo.name}` });
+      navigate(from ?? homePathFor(res.user.role), { replace: true });
+    } catch {
+      setRole(demo.role);
+      setMobile(demo.mobile);
+      handleSend(demo.mobile, demo.role);
+    }
   };
 
   const handleVerify = async () => {
@@ -251,6 +260,7 @@ export function Login() {
           </div>
         )}
       </div>
+      <DemoBar />
     </div>
   );
 }

@@ -21,6 +21,39 @@ interface DraftItem {
   price: string;
 }
 
+const DEMO_PRESETS = [
+  {
+    label: 'Weekly Ration (₹1,500)',
+    amount: '1500',
+    note: 'Weekly essentials: Atta, Rice & Oil',
+    items: [
+      { name: 'Atta 10kg', qty: '1', price: '450' },
+      { name: 'Basmati Rice 10kg', qty: '1', price: '600' },
+      { name: 'Mustard Oil 2L', qty: '2', price: '450' },
+    ],
+  },
+  {
+    label: 'Snacks & Drinks (₹250)',
+    amount: '250',
+    note: 'Evening snacks & biscuits',
+    items: [
+      { name: 'Cold Drinks 2L', qty: '1', price: '95' },
+      { name: 'Namkeen & Chips', qty: '3', price: '95' },
+      { name: 'Biscuits pack', qty: '2', price: '60' },
+    ],
+  },
+  {
+    label: 'Dairy & Bread (₹140)',
+    amount: '140',
+    note: 'Fresh morning milk & bread',
+    items: [
+      { name: 'Full Cream Milk 1L', qty: '1', price: '70' },
+      { name: 'Sandwich Bread', qty: '1', price: '45' },
+      { name: 'Eggs (6 pcs)', qty: '1', price: '25' },
+    ],
+  },
+];
+
 export function ShopView() {
   const { t } = useT();
   const { token } = useParams();
@@ -131,6 +164,27 @@ export function ShopView() {
 
         {/* Take udhaar form */}
         <Card>
+          {/* Demo Quick Presets */}
+          <div className="mb-4">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-ink-400">⚡ Demo Quick Presets</span>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {DEMO_PRESETS.map((preset) => (
+                <button
+                  key={preset.label}
+                  type="button"
+                  onClick={() => {
+                    setAmount(preset.amount);
+                    setNote(preset.note);
+                    setItems(preset.items);
+                  }}
+                  className="rounded-xl border border-brand-200 bg-brand-50/60 px-2.5 py-1 text-xs font-semibold text-brand-700 hover:bg-brand-100 transition"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <Field label={t('udhaar.request.amount')}>
             <Input
               leading="₹"

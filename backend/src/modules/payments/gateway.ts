@@ -41,7 +41,9 @@ export interface PaymentGateway {
   createRefund(params: { gatewayPaymentId: string; amountPaise: number }): Promise<{ gatewayRefundId: string }>;
   /** Verify an inbound webhook's HMAC signature over the raw body. */
   verifyWebhookSignature(envelope: WebhookEnvelope): boolean;
-  /** Build a signed webhook envelope — used by the mock checkout to call us back. */
+  /** Verify checkout client response signature: HMAC-SHA256 of orderId|paymentId using keySecret. */
+  verifyPaymentSignature(params: { orderId: string; paymentId: string; signature: string }): boolean;
+  /** Build a signed webhook envelope — used by the mock checkout or tests to call us back. */
   buildWebhook(event: {
     eventType: 'payment.captured' | 'payment.failed';
     gatewayOrderId: string;
@@ -75,6 +77,11 @@ class MockGateway implements PaymentGateway {
     return safeEqualHex(expected, signature);
   }
 
+  verifyPaymentSignature(params: { orderId: string; paymentId: string; signature: string }): boolean {
+    const expected = hmacSha256(CONFIG.gateway.keySecret, `${params.orderId}|${params.paymentId}`);
+    return safeEqualHex(expected, params.signature);
+  }
+
   buildWebhook(event: {
     eventType: 'payment.captured' | 'payment.failed';
     gatewayOrderId: string;
@@ -103,9 +110,130 @@ class MockGateway implements PaymentGateway {
   }
 }
 
+export class RazorpayGateway implements PaymentGateway {
+  readonly provider = 'razorpay';
+
+  constructor(
+    private readonly keyId = CONFIG.gateway.keyId,
+    private readonly keySecret = CONFIG.gateway.keySecret,
+    private readonly webhookSecret = CONFIG.gateway.webhookSecret,
+    private readonly apiBase = 'https://api.razorpay.com/v1',
+  ) {}
+
+  get publicKeyId(): string {
+    return this.keyId;
+  }
+
+  private get authHeader(): string {
+    return 'Basic ' + Buffer.from(`${this.keyId}:${this.keySecret}`).toString('base64');
+  }
+
+  async createOrder(params: CreateOrderParams): Promise<CreatedOrder> {
+    const res = await fetch(`${this.apiBase}/orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: this.authHeader,
+      },
+      body: JSON.stringify({
+        amount: params.amountPaise,
+        currency: params.currency ?? 'INR',
+        receipt: params.receipt,
+        notes: params.notes,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { error?: { description?: string } };
+      throw new Error(err?.error?.description || `Razorpay order creation failed with status ${res.status}`);
+    }
+
+    const data = (await res.json()) as { id: string; amount: number; currency: string };
+    return {
+      gatewayOrderId: data.id,
+      provider: this.provider,
+      amountPaise: data.amount,
+      currency: data.currency ?? 'INR',
+    };
+  }
+
+  async createRefund(params: { gatewayPaymentId: string; amountPaise: number }): Promise<{ gatewayRefundId: string }> {
+    const res = await fetch(`${this.apiBase}/payments/${params.gatewayPaymentId}/refund`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: this.authHeader,
+      },
+      body: JSON.stringify({
+        amount: params.amountPaise,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = (await res.json().catch(() => ({}))) as { error?: { description?: string } };
+      throw new Error(err?.error?.description || `Razorpay refund failed with status ${res.status}`);
+    }
+
+    const data = (await res.json()) as { id: string };
+    return { gatewayRefundId: data.id };
+  }
+
+  verifyWebhookSignature({ body, signature }: WebhookEnvelope): boolean {
+    const expected = hmacSha256(this.webhookSecret, body);
+    return safeEqualHex(expected, signature);
+  }
+
+  verifyPaymentSignature(params: { orderId: string; paymentId: string; signature: string }): boolean {
+    const expected = hmacSha256(this.keySecret, `${params.orderId}|${params.paymentId}`);
+    return safeEqualHex(expected, params.signature);
+  }
+
+  buildWebhook(event: {
+    eventType: 'payment.captured' | 'payment.failed';
+    gatewayOrderId: string;
+    gatewayPaymentId: string;
+    amountPaise: number;
+    failureReason?: string;
+  }) {
+    const eventId = webhookEventId();
+    const payload = {
+      entity: 'event',
+      account_id: 'acc_live',
+      event: event.eventType,
+      contains: ['payment'],
+      payload: {
+        payment: {
+          entity: {
+            id: event.gatewayPaymentId,
+            entity: 'payment',
+            amount: event.amountPaise,
+            currency: 'INR',
+            status: event.eventType === 'payment.captured' ? 'captured' : 'failed',
+            order_id: event.gatewayOrderId,
+            error_description: event.failureReason,
+          },
+        },
+        order: {
+          entity: {
+            id: event.gatewayOrderId,
+            entity: 'order',
+            amount: event.amountPaise,
+            currency: 'INR',
+          },
+        },
+      },
+      created_at: Math.floor(Date.now() / 1000),
+    };
+    const body = JSON.stringify(payload);
+    const signature = hmacSha256(this.webhookSecret, body);
+    return { eventId, body, signature };
+  }
+}
+
 export function getGateway(): PaymentGateway {
-  // Only the mock provider is implemented; a real one plugs in here by provider name.
-  switch (CONFIG.gateway.provider) {
+  switch (CONFIG.gateway.provider.toLowerCase()) {
+    case 'razorpay':
+      return new RazorpayGateway();
     case 'mock':
     default:
       return new MockGateway();

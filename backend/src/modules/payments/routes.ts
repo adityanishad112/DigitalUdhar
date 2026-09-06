@@ -11,6 +11,7 @@ import {
   processWebhook,
   refundPayment,
   simulatePayment,
+  verifyPayment,
 } from './service';
 
 export const paymentsRouter = Router();
@@ -34,6 +35,24 @@ paymentsRouter.post(
   }),
 );
 
+// Customer verifies client-side checkout completion with the signed gateway response.
+paymentsRouter.post(
+  '/verify',
+  requireAuth,
+  requireRole('CUSTOMER'),
+  validate({
+    body: z.object({
+      gatewayOrderId: z.string().min(1),
+      gatewayPaymentId: z.string().min(1),
+      signature: z.string().min(1),
+    }),
+  }),
+  asyncHandler(async (req, res) => {
+    const result = await verifyPayment(req.user!.id, req.body);
+    return ok(res, result);
+  }),
+);
+
 /**
  * Gateway webhook. UNAUTHENTICATED — trust comes solely from the HMAC signature
  * over the raw body. Verified + idempotent inside processWebhook. Always answer
@@ -42,9 +61,13 @@ paymentsRouter.post(
 paymentsRouter.post(
   '/webhook',
   asyncHandler(async (req, res) => {
-    const signature = (req.headers['x-webhook-signature'] as string) ?? '';
+    const signature =
+      (req.headers['x-razorpay-signature'] as string) ??
+      (req.headers['x-webhook-signature'] as string) ??
+      '';
+    const eventId = (req.headers['x-razorpay-event-id'] as string) ?? undefined;
     const rawBody = (req as unknown as { rawBody?: string }).rawBody ?? JSON.stringify(req.body ?? {});
-    const result = await processWebhook(rawBody, signature);
+    const result = await processWebhook(rawBody, signature, eventId);
     return ok(res, result);
   }),
 );

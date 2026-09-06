@@ -13,6 +13,7 @@ import type {
   AuthResult,
   CreateOrderResult,
   CustomerUdhaar,
+  DemoAccountsResponse,
   Dispute,
   LedgerTxn,
   Me,
@@ -29,11 +30,13 @@ import type {
   SimulateResult,
   Udhaar,
   UdhaarDetail,
+  VerifyPaymentResult,
 } from '@/lib/types';
 
 /** Centralised query keys so mutations can invalidate precisely. */
 export const qk = {
   me: ['me'] as const,
+  demoAccounts: ['demo', 'accounts'] as const,
   udhaarList: ['udhaar', 'list'] as const,
   udhaar: (id: string) => ['udhaar', id] as const,
   qrResolve: (token: string) => ['qr', 'resolve', token] as const,
@@ -275,6 +278,20 @@ export function useSimulatePayment() {
   });
 }
 
+export function useVerifyPayment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { gatewayOrderId: string; gatewayPaymentId: string; signature: string }) =>
+      api.post<VerifyPaymentResult>('/payments/verify', input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.udhaarList });
+      qc.invalidateQueries({ queryKey: ['udhaar'] });
+      qc.invalidateQueries({ queryKey: qk.unreadCount });
+      qc.invalidateQueries({ queryKey: qk.customers });
+    },
+  });
+}
+
 export function useRefund() {
   const qc = useQueryClient();
   return useMutation({
@@ -410,5 +427,52 @@ export function useSetMerchantStatus() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Demo Suite (Accounts, 1-Click Fast Switching, Reset, Sample Scenarios)
+// ---------------------------------------------------------------------------
+export function useDemoAccounts() {
+  return useQuery({
+    queryKey: qk.demoAccounts,
+    queryFn: () => api.get<DemoAccountsResponse>('/demo/accounts'),
+    staleTime: 60_000,
+  });
+}
+
+export function useDemoQuickLogin() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { mobile: string; role: Role }) =>
+      api.post<AuthResult>('/demo/quick-login', input),
+    onSuccess: () => {
+      qc.clear();
+    },
+  });
+}
+
+export function useResetDemoData() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ success: boolean; message: string }>('/demo/reset'),
+    onSuccess: () => {
+      qc.clear();
+    },
+  });
+}
+
+export function useSeedDemoScenario() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (scenario: 'new_request' | 'overdue_request') =>
+      api.post<{ success: boolean; scenario: string; message: string }>('/demo/seed-scenario', { scenario }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.udhaarList });
+      qc.invalidateQueries({ queryKey: ['udhaar'] });
+      qc.invalidateQueries({ queryKey: qk.report });
+      qc.invalidateQueries({ queryKey: qk.customers });
+    },
+  });
+}
+
 // Re-export a couple of types callers commonly need alongside the hooks.
 export type { Udhaar };
+
